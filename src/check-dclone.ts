@@ -14,6 +14,7 @@ type D2tzDCloneState = {
 };
 
 type D2tzErrorResponse = {
+  status?: unknown;
   error?: unknown;
   message?: unknown;
   statusCode?: unknown;
@@ -33,7 +34,7 @@ const WATCHED_REGIONS: Region[] = ["us", "eu", "asia"];
 const LOCAL_STATE_FILE = path.join(process.cwd(), ".dclone-state.json");
 
 function isD2tzErrorResponse(value: unknown): value is D2tzErrorResponse {
-  return typeof value === "object" && value !== null && ("error" in value || "message" in value || "statusCode" in value);
+  return typeof value === "object" && value !== null && ("error" in value || "message" in value || "status" in value || "statusCode" in value);
 }
 
 function isValidDCloneState(value: unknown): value is D2tzDCloneState {
@@ -80,7 +81,6 @@ async function fetchDCloneStates(): Promise<D2tzDCloneState[]> {
   });
 
   const payload: unknown = await response.json().catch(() => undefined);
-  console.log("d2tz API response:", JSON.stringify(payload, null, 2));
 
   if (!response.ok) {
     throw new Error(`d2tz API failed with HTTP ${response.status}: ${JSON.stringify(payload)}`);
@@ -205,6 +205,15 @@ export async function runDCloneCheck(): Promise<CheckResult> {
   const lastNotified = { ...stored.state };
   const matchingStates = states.filter((state) => isWatchedRegion(state.region) && state.ladder === false && state.hardcore === false && state.dlc === "RotW");
   const notifications: Array<{ region: Region; state: number }> = [];
+
+  console.log(
+    "DClone states:",
+    matchingStates.map((state) => ({
+      region: state.region,
+      state: state.state,
+      displayState: state.state + 1
+    }))
+  );
 
   for (const region of WATCHED_REGIONS) {
     const current = matchingStates.find((state) => state.region === region);
