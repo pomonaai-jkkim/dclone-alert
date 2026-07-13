@@ -58,6 +58,18 @@ function shouldNotify(item: D2tzDCloneState): item is D2tzDCloneState & { region
   );
 }
 
+function selectLastStateByRegion(states: D2tzDCloneState[]): Partial<Record<Region, D2tzDCloneState & { region: Region }>> {
+  const lastStateByRegion: Partial<Record<Region, D2tzDCloneState & { region: Region }>> = {};
+
+  for (const state of states) {
+    if (isWatchedRegion(state.region)) {
+      lastStateByRegion[state.region] = { ...state, region: state.region };
+    }
+  }
+
+  return lastStateByRegion;
+}
+
 async function fetchDCloneStates(): Promise<D2tzDCloneState[]> {
   const token = process.env.D2TZ_API_TOKEN;
   if (!token) {
@@ -195,12 +207,16 @@ async function sendDiscordNotification(item: D2tzDCloneState & { region: Region 
 export async function runDCloneCheck(): Promise<CheckResult> {
   const [states, stored] = await Promise.all([fetchDCloneStates(), loadLastNotifiedState()]);
   const lastNotified = { ...stored.state };
-  const matchingStates = states.filter((state) => isWatchedRegion(state.region));
+  const lastStateByRegion = selectLastStateByRegion(states);
+  const selectedStates = WATCHED_REGIONS.flatMap((region) => {
+    const state = lastStateByRegion[region];
+    return state ? [state] : [];
+  });
   const notifications: Array<{ region: Region; state: number }> = [];
 
   console.log(
-    "DClone states:",
-    matchingStates.map((state) => ({
+    "DClone selected states:",
+    selectedStates.map((state) => ({
       region: state.region,
       state: state.state,
       displayState: state.displayState ?? state.state + 1
@@ -208,7 +224,7 @@ export async function runDCloneCheck(): Promise<CheckResult> {
   );
 
   for (const region of WATCHED_REGIONS) {
-    const current = matchingStates.find((state) => state.region === region);
+    const current = lastStateByRegion[region];
 
     if (!current || current.state < 3) {
       delete lastNotified[region];
@@ -225,7 +241,7 @@ export async function runDCloneCheck(): Promise<CheckResult> {
   await saveLastNotifiedState(lastNotified, stored.usingRedis);
 
   return {
-    checked: matchingStates.length,
+    checked: selectedStates.length,
     notified: notifications,
     storage: stored.usingRedis ? "redis" : "local-file"
   };
