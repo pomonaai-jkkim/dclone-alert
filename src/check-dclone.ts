@@ -3,14 +3,11 @@ import path from "node:path";
 
 type Region = "us" | "eu" | "asia";
 type DCloneStateNumber = 0 | 1 | 2 | 3 | 4 | 5;
-type Dlc = "RotW" | string;
 
 type D2tzDCloneState = {
   region: Region | string;
-  ladder: boolean;
-  hardcore: boolean;
-  dlc: Dlc;
   state: DCloneStateNumber | number;
+  displayState?: number;
 };
 
 type D2tzErrorResponse = {
@@ -45,10 +42,8 @@ function isValidDCloneState(value: unknown): value is D2tzDCloneState {
   const item = value as Partial<D2tzDCloneState>;
   return (
     typeof item.region === "string" &&
-    typeof item.ladder === "boolean" &&
-    typeof item.hardcore === "boolean" &&
-    typeof item.dlc === "string" &&
-    typeof item.state === "number"
+    typeof item.state === "number" &&
+    (item.displayState === undefined || typeof item.displayState === "number")
   );
 }
 
@@ -59,9 +54,6 @@ function isWatchedRegion(region: string): region is Region {
 function shouldNotify(item: D2tzDCloneState): item is D2tzDCloneState & { region: Region } {
   return (
     isWatchedRegion(item.region) &&
-    item.ladder === false &&
-    item.hardcore === false &&
-    item.dlc === "RotW" &&
     item.state >= 3
   );
 }
@@ -181,7 +173,7 @@ async function sendDiscordNotification(item: D2tzDCloneState & { region: Region 
     throw new Error("DISCORD_WEBHOOK_URL is not configured.");
   }
 
-  const displayState = item.state + 1;
+  const displayState = item.displayState ?? item.state + 1;
   const content = [
     `🚨 우버디아 ${item.region.toUpperCase()}서버에서 ${displayState}단계! 🚨`,
     `Log: ${item.region.toUpperCase()} Non-Ladder RotW Softcore State ${displayState}/6`
@@ -203,7 +195,7 @@ async function sendDiscordNotification(item: D2tzDCloneState & { region: Region 
 export async function runDCloneCheck(): Promise<CheckResult> {
   const [states, stored] = await Promise.all([fetchDCloneStates(), loadLastNotifiedState()]);
   const lastNotified = { ...stored.state };
-  const matchingStates = states.filter((state) => isWatchedRegion(state.region) && state.ladder === false && state.hardcore === false && state.dlc === "RotW");
+  const matchingStates = states.filter((state) => isWatchedRegion(state.region));
   const notifications: Array<{ region: Region; state: number }> = [];
 
   console.log(
@@ -211,7 +203,7 @@ export async function runDCloneCheck(): Promise<CheckResult> {
     matchingStates.map((state) => ({
       region: state.region,
       state: state.state,
-      displayState: state.state + 1
+      displayState: state.displayState ?? state.state + 1
     }))
   );
 
